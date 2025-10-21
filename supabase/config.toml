@@ -1,0 +1,31 @@
+# Supabase Local Development Configuration
+# This file is for local development only
+
+project_id = "dppagent"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# For MVP, we'll keep auth simple
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
