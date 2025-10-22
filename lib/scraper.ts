@@ -53,12 +53,19 @@ export async function scrapeDpp(url: string): Promise<ScrapeResult> {
         let data: any
         let extractionMethod = 'none'
 
-        // Parse based on content type
-        if (contentType.includes('json')) {
+        // Check if URL looks like JSON (by extension)
+        const urlLooksLikeJson = httpUrl.match(/\.(json|jsonld)(\?|$)/i)
+
+        // Parse based on content type OR file extension
+        if (contentType.includes('json') || urlLooksLikeJson) {
           try {
             data = JSON.parse(text)
             extractionMethod = method.name === 'application/ld+json' ? 'content_negotiation_ld' : 'direct_json'
-          } catch {
+          } catch (parseError) {
+            // If URL looks like JSON but parsing failed, this is a real error
+            if (urlLooksLikeJson) {
+              console.error('Failed to parse JSON from URL that looks like JSON:', httpUrl, parseError)
+            }
             continue
           }
         } else if (contentType.includes('html')) {
