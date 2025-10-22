@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getRecentDpps, getDppStats } from '@/lib/scraper'
+import ServiceEndpointFetcher from '@/components/ServiceEndpointFetcher'
 
 type RecentDpp = {
   id: string
@@ -277,6 +278,17 @@ export default function Home() {
                     </ul>
                   </div>
                 </div>
+              )}
+
+              {/* Service Endpoint Fetcher - Auto-detect DID Documents */}
+              {scrapeResult.success && scrapeResult.serviceEndpoints && scrapeResult.serviceEndpoints.length > 0 && (
+                <ServiceEndpointFetcher
+                  endpoints={scrapeResult.serviceEndpoints}
+                  parentDppId={scrapeResult.savedId}
+                  onFetch={async (url, parentId) => {
+                    await handleScrape(url, parentId)
+                  }}
+                />
               )}
             </div>
           )}

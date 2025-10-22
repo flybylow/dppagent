@@ -7,6 +7,53 @@ import { supabase } from './supabase'
 import { convertDidToUrl, detectDppFormat } from './dpp-utils'
 import * as cheerio from 'cheerio'
 
+// ============================================================================
+// DID Document Detection & Service Endpoint Extraction
+// ============================================================================
+
+export function isDidDocument(data: any): boolean {
+  if (!data || typeof data !== 'object') return false
+  
+  return !!(
+    // Has DID context
+    (data['@context']?.includes?.('did/v1') || 
+     data['@context']?.includes?.('https://www.w3.org/ns/did/v1')) ||
+    // Has DID identifier
+    data.id?.startsWith('did:') ||
+    // Has verification methods
+    data.verificationMethod ||
+    // Has service endpoints
+    (data.service && Array.isArray(data.service))
+  )
+}
+
+export interface ServiceEndpoint {
+  id: string
+  type: string
+  serviceEndpoint: string
+}
+
+export function extractServiceEndpoints(didDocument: any): ServiceEndpoint[] {
+  if (!didDocument?.service || !Array.isArray(didDocument.service)) {
+    return []
+  }
+  
+  return didDocument.service
+    .filter(s => s.serviceEndpoint && typeof s.serviceEndpoint === 'string')
+    .map(s => ({
+      id: s.id || '',
+      type: s.type || 'Unknown',
+      serviceEndpoint: s.serviceEndpoint
+    }))
+}
+
+export function getProductPassportEndpoints(didDocument: any): string[] {
+  const endpoints = extractServiceEndpoints(didDocument)
+  return endpoints
+    .filter(e => e.type === 'ProductPassport' || e.type.includes('Product'))
+    .map(e => e.serviceEndpoint)
+}
+
 export type ScrapeResult = {
   success: boolean
   url: string
@@ -111,6 +158,11 @@ export async function scrapeDpp(url: string): Promise<ScrapeResult> {
         if (data) {
           const format = detectDppFormat(data, contentType)
           const size = JSON.stringify(data).length
+          
+          // Check if this is a DID Document
+          const isDid = isDidDocument(data)
+          const serviceEndpoints = isDid ? extractServiceEndpoints(data) : []
+          const productEndpoints = isDid ? getProductPassportEndpoints(data) : []
 
           return {
             success: true,
@@ -119,7 +171,10 @@ export async function scrapeDpp(url: string): Promise<ScrapeResult> {
             format,
             contentType,
             extractionMethod,
-            size
+            size,
+            isDidDocument: isDid,
+            serviceEndpoints,
+            productEndpoints
           }
         }
       } catch (error) {
@@ -172,12 +227,18 @@ export async function saveToDatabase(
         fetch_status: scrapeResult.success ? 'completed' : 'failed',
         error_message: scrapeResult.error || null,
         fetched_at: new Date().toISOString(),
+        parent_dpp_id: parentDppId || null,
         metadata: {
           format: scrapeResult.format,
           content_type: scrapeResult.contentType,
           extraction_method: scrapeResult.extractionMethod,
           size: scrapeResult.size,
-          scraped_from_dashboard: true
+          scraped_from_dashboard: true,
+          is_did_document: scrapeResult.isDidDocument || false,
+          service_endpoints: scrapeResult.serviceEndpoints || [],
+          product_endpoints: scrapeResult.productEndpoints || [],
+          endpoints_count: scrapeResult.serviceEndpoints?.length || 0,
+          has_parent: !!parentDppId
         }
       })
       .select()
