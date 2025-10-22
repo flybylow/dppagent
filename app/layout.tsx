@@ -36,6 +36,12 @@ export default function RootLayout({
                   <a href="/test" className="text-gray-700 hover:text-gray-900 px-3 py-2">
                     Test Lab
                   </a>
+                  <a href="/did-browser" className="text-gray-700 hover:text-gray-900 px-3 py-2">
+                    DID Browser
+                  </a>
+                  <a href="/schemas" className="text-gray-700 hover:text-gray-900 px-3 py-2">
+                    Schemas
+                  </a>
                 </div>
               </div>
             </div>

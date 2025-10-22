@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { convertDidToUrl, detectDppFormat } from '@/lib/dpp-utils'
 import LinkExpander from '@/components/LinkExpander'
+import EndpointExplorer from '@/components/EndpointExplorer'
 
 type TestTarget = {
   id: string
@@ -91,38 +92,30 @@ export default function TestPage() {
     }
   }
 
-  const testWellKnown = async (baseUrl: string) => {
-    const patterns = [
-      '/.well-known/dpp-configuration',
-      '/.well-known/dppdata',
-      '/api/dpp/v1/',
-      '/dpp/api/'
-    ]
+  const testWellKnown = async (baseUrl: string, targetId: string) => {
+    try {
+      const response = await fetch('/api/discover-well-known', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl })
+      })
 
-    const results = []
-    for (const pattern of patterns) {
-      const testUrl = baseUrl + pattern
-      try {
-        const response = await fetch('/api/test-dpp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: testUrl })
-        })
-        results.push({
-          pattern,
-          status: response.status,
-          found: response.ok
-        })
-      } catch (error) {
-        results.push({
-          pattern,
-          status: 'error',
-          found: false
-        })
-      }
+      const result = await response.json()
+      
+      setTestResults(prev => ({
+        ...prev,
+        [`${targetId}_wellknown`]: {
+          success: true,
+          data: result,
+          timestamp: new Date().toISOString()
+        }
+      }))
+      
+      return result
+    } catch (error: any) {
+      console.error('Well-known discovery failed:', error)
+      return { success: false, error: error.message }
     }
-
-    return results
   }
 
   return (
@@ -239,7 +232,7 @@ export default function TestPage() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => testUrl(target)}
                     disabled={testingId === target.id}
@@ -264,6 +257,17 @@ export default function TestPage() {
                     )}
                   </button>
 
+                  <button
+                    onClick={() => testWellKnown(target.base_url, target.id)}
+                    disabled={testingId === target.id}
+                    className="inline-flex items-center px-4 py-2 border-2 border-blue-300 text-sm font-semibold rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 shadow-md transition-all duration-200 disabled:opacity-50"
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Try API Discovery
+                  </button>
+
                   <a
                     href={target.metadata?.test_url || target.base_url}
                     target="_blank"
@@ -276,6 +280,41 @@ export default function TestPage() {
                     Open in Browser
                   </a>
                 </div>
+
+                {/* Well-Known Discovery Results */}
+                {testResults[`${target.id}_wellknown`] && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-white border-2 border-blue-200 rounded-xl">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      API Discovery Results
+                    </h4>
+                    {testResults[`${target.id}_wellknown`].data.endpointsFound > 0 ? (
+                      <>
+                        <div className="mb-4 p-3 bg-white border-2 border-green-300 rounded-lg">
+                          <p className="text-sm text-green-700 font-bold flex items-center gap-2">
+                            <svg className="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Found {testResults[`${target.id}_wellknown`].data.endpointsFound} working endpoint(s)!
+                          </p>
+                          {testResults[`${target.id}_wellknown`].data.endpointsFound >= 5 && (
+                            <p className="text-xs text-green-600 mt-1">
+                              🏆 This site has excellent API support! (Gold standard)
+                            </p>
+                          )}
+                        </div>
+                        
+                        <EndpointExplorer discoveryResults={testResults[`${target.id}_wellknown`].data} />
+                      </>
+                    ) : (
+                      <p className="text-sm text-blue-700">
+                        ✗ No API endpoints found. Checked {testResults[`${target.id}_wellknown`].data.patternsChecked} patterns.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Test Results */}
                 {testResults[target.id] && (
@@ -332,10 +371,44 @@ export default function TestPage() {
 
                     {/* Linked Data Expander */}
                     {testResults[target.id].success && testResults[target.id].data?.data && (
-                      <LinkExpander 
-                        dppData={testResults[target.id].data.data}
-                        dppUrl={target.metadata.test_url}
-                      />
+                      <>
+                        {/* Show extracted JSON-LD blocks if found */}
+                        {testResults[target.id].data.extractedJsonLd && testResults[target.id].data.extractedJsonLd.length > 0 && (
+                          <div className="p-4 bg-gradient-to-br from-green-50 to-white border-2 border-green-200 rounded-xl">
+                            <div className="flex items-start gap-3 mb-3">
+                              <div className="bg-green-100 rounded-full p-2 flex-shrink-0">
+                                <svg className="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-green-900 mb-1">
+                                  ✨ Found {testResults[target.id].data.extractedJsonLd.length} JSON-LD Block{testResults[target.id].data.extractedJsonLd.length > 1 ? 's' : ''}
+                                </h4>
+                                <p className="text-sm text-green-700">
+                                  Extracted structured data from HTML page
+                                </p>
+                              </div>
+                            </div>
+                            <details className="group">
+                              <summary className="cursor-pointer text-sm font-medium text-green-700 hover:text-green-900 flex items-center gap-1">
+                                <svg className="h-4 w-4 group-open:rotate-90 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                </svg>
+                                View Extracted JSON-LD
+                              </summary>
+                              <pre className="mt-2 text-xs bg-white p-3 rounded border border-green-300 overflow-x-auto max-h-96">
+                                {JSON.stringify(testResults[target.id].data.extractedJsonLd, null, 2)}
+                              </pre>
+                            </details>
+                          </div>
+                        )}
+                        
+                        <LinkExpander 
+                          dppData={testResults[target.id].data.data}
+                          dppUrl={target.metadata.test_url}
+                        />
+                      </>
                     )}
                   </div>
                 )}
