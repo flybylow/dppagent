@@ -66,7 +66,7 @@ export default function Home() {
     setStats(statsResult)
   }
 
-  const handleScrape = async (url?: string) => {
+  const handleScrape = async (url?: string, parentDppId?: string) => {
     const targetUrl = url || urlInput
     if (!targetUrl) return
 
@@ -77,7 +77,7 @@ export default function Home() {
       const response = await fetch('/api/scrape-dpp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl })
+        body: JSON.stringify({ url: targetUrl, parentDppId })
       })
 
       const result = await response.json()

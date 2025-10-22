@@ -3,7 +3,7 @@ import { scrapeDpp, saveToDatabase } from '@/lib/scraper'
 
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json()
+    const { url, parentDppId } = await request.json()
 
     if (!url) {
       return NextResponse.json(
@@ -15,16 +15,16 @@ export async function POST(request: NextRequest) {
     // Scrape the DPP
     const scrapeResult = await scrapeDpp(url)
 
-    // Save to database if successful
+    // Save to database if successful (with optional parent link)
     let savedId = null
     if (scrapeResult.success) {
-      const saveResult = await saveToDatabase(url, scrapeResult)
+      const saveResult = await saveToDatabase(url, scrapeResult, parentDppId)
       if (saveResult.success) {
         savedId = saveResult.id
       }
     } else {
       // Save failed attempts too (for tracking)
-      await saveToDatabase(url, scrapeResult)
+      await saveToDatabase(url, scrapeResult, parentDppId)
     }
 
     return NextResponse.json({
